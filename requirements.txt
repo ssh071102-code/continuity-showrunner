@@ -1,0 +1,4 @@
+openai>=2.0
+requests>=2.31
+dashscope>=1.20
+imageio-ffmpeg>=0.5   # bundles ffmpeg for src/stitch.py (title card / captions / xfade) — no system ffmpeg needed

@@ -1,0 +1,14 @@
+# secrets — NEVER commit the real key; only the template is tracked
+secrets/*
+!secrets/.env.example
+.env
+*.env
+
+# generated media / large files
+outputs/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
