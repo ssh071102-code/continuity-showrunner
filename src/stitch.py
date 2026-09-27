@@ -77,7 +77,7 @@ def _probe(path: Path) -> tuple[int | None, int | None, float | None]:
 
 
 def _has_cjk(s: str) -> bool:
-    return any("一" <= c <= "鿿" for c in s)
+    return any("\u4e00" <= c <= "\u9fff" for c in s)
 
 
 def _prep_font(text: str = "") -> str | None:

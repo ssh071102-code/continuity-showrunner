@@ -91,7 +91,6 @@ src/qwen.py         Qwen Cloud chat client, loads secrets/.env
 src/stitch.py       ffmpeg assembly: title card, captions, crossfades, music
 tests/              offline tests (no key, no network)
 docs/grids/         sampled-frame grids per version
-docs/demo-script.md demo video outline
 NOTES-qwen-api.md   API notes for the Qwen Cloud endpoints used here
 secrets/            API key template; the real key is gitignored
 outputs/            generated frames, clips and films (gitignored)
@@ -121,7 +120,7 @@ outputs/            generated frames, clips and films (gitignored)
 
 ## Related
 
-[script2video](https://github.com/ssh071102-code/script2video) is a separate project from the same author.
+[script2video](https://github.com/ssh071102-code/script2video) handles the deterministic side of the same problem: it turns a written script into narration with word-timed captions and assembles the video with ffmpeg.
 
 ## AI assistance
 This project was built with AI assistance (Claude Code). Commits it co-authored carry a `Co-Authored-By` trailer.
