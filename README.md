@@ -112,6 +112,7 @@ outputs/            generated frames, clips and films (gitignored)
 - `src.chain` has no `--limit` or `--dry-run`; use `src.run` for cheap partial runs.
 - QA became fail-closed after the v4 film was made. Before that change, a QA call that returned no verdict counted as a pass.
 - Beat keyframe prompts in `src.chain` still ask for a photorealistic look, so non-photographic plan styles are not supported there yet.
+- The Linux build of ffmpeg bundled with imageio-ffmpeg has no `drawtext` filter, so title cards and captions are skipped. Point `IMAGEIO_FFMPEG_EXE` at a full system ffmpeg (for example `/usr/bin/ffmpeg`); CI does this.
 
 ## Credits
 

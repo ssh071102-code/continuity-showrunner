@@ -14,5 +14,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements-dev.txt
-      # Offline suite: no API key, no network calls. ffmpeg comes from imageio-ffmpeg.
+      # imageio-ffmpeg's Linux binary lacks drawtext (title cards, captions); use the distro ffmpeg.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # Offline suite: no API key, no network calls.
       - run: python -m pytest tests -v
+        env:
+          IMAGEIO_FFMPEG_EXE: /usr/bin/ffmpeg
