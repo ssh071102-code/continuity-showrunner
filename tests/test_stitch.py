@@ -4,8 +4,8 @@ No API key and no money: clips are synthesized with the bundled ffmpeg.
 Skips cleanly if imageio-ffmpeg isn't installed. Runs hermetically — OUTPUTS
 and _TMP are redirected into pytest's tmp_path, so the real outputs/ is untouched.
 
-    pip install pytest imageio-ffmpeg
-    pytest continuity-showrunner/tests
+    pip install -r requirements-dev.txt
+    python -m pytest tests
 """
 import pytest
 
