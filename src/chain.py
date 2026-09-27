@@ -11,10 +11,14 @@ Pipeline (one segment at a time, never batch):
   QA gate   After every keyframe and every segment tail, a qwen3-vl vision
             check compares against the character sheet. Fail -> one retry,
             then hard stop (stop-loss; never burn segments on a broken chain).
+            If the QA call itself fails (network error, unparseable reply) the
+            check is recorded as "qa_unavailable" and counts as a FAIL by
+            default. Set CHAIN_QA_FAIL_OPEN=1 to let it pass instead.
 
 Run:  python -m src.chain "premise"
 """
 import json
+import os
 import sys
 
 import dashscope
@@ -28,6 +32,19 @@ from src.showrunner import write_plan, build_shot_prompts
 dashscope.base_http_api_url = "https://dashscope-intl.aliyuncs.com/api/v1"
 
 QA_MODEL = "qwen3-vl-plus"
+
+# Appended to the K0 prompt only when the plan has no "style" field
+# (build_shot_prompts already appends the plan's style when there is one).
+DEFAULT_STYLE = "Natural lighting, realistic detail."
+
+
+def _qa_fail_open() -> bool:
+    """True only when CHAIN_QA_FAIL_OPEN is set to 1/true/yes."""
+    return os.getenv("CHAIN_QA_FAIL_OPEN", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _qa_unavailable(reason: str) -> dict:
+    return {"passed": _qa_fail_open(), "status": "qa_unavailable", "issues": reason}
 
 
 QA_TEXT = (
@@ -44,10 +61,12 @@ QA_TEXT = (
 
 
 def vision_qa(candidate_path, ref_path, what: str) -> dict:
-    """Compare a frame against the character sheet. Returns {passed, issues}.
+    """Compare a frame against the character sheet.
 
-    QA is advisory: network failure (after retries) or an unparseable reply
-    degrades to a non-blocking pass — a human eyeballs tails anyway.
+    Returns {passed, status, issues}. status is "ok" when the model answered
+    with parseable JSON, "qa_unavailable" when the call failed after retries or
+    the reply could not be parsed. qa_unavailable is fail-closed (passed=False)
+    unless CHAIN_QA_FAIL_OPEN=1.
     """
     from src.media import fresh_local_uri, with_retry
 
@@ -69,20 +88,30 @@ def vision_qa(candidate_path, ref_path, what: str) -> dict:
 
     try:
         rsp = with_retry(_attempt, attempts=3)
-    except Exception as e:
-        return {"passed": True,
-                "issues": f"(QA network failed after retries; not blocking: {type(e).__name__})"}
+    except Exception as e:  # noqa: BLE001 - any failure here means "no verdict"
+        return _qa_unavailable(f"QA call failed after retries: {type(e).__name__}")
     if rsp.status_code != 200:
-        return {"passed": True, "issues": f"(QA call failed {rsp.code}; not blocking)"}
-    text = "".join(i.get("text", "") for i in rsp.output.choices[0].message.content
-                   if isinstance(i, dict))
+        return _qa_unavailable(f"QA call returned {rsp.status_code} {rsp.code}")
     try:
+        text = "".join(i.get("text", "") for i in rsp.output.choices[0].message.content
+                       if isinstance(i, dict))
         start, end = text.find("{"), text.rfind("}")
         j = json.loads(text[start:end + 1])
-        return {"passed": bool(j.get("same_character")) and not j.get("artifacts"),
-                "issues": j.get("issues", "")}
-    except Exception:
-        return {"passed": True, "issues": f"(unparseable QA reply: {text[:100]})"}
+        if not isinstance(j, dict) or "same_character" not in j:
+            raise ValueError("missing same_character")
+    except Exception:  # noqa: BLE001 - malformed reply means "no verdict"
+        return _qa_unavailable("unparseable QA reply")
+    return {"passed": bool(j.get("same_character")) and not j.get("artifacts"),
+            "status": "ok", "issues": j.get("issues", "")}
+
+
+def k0_prompt(plan, shots) -> str:
+    """K0 = shot 1's keyframe prompt, which already carries the plan's style.
+    Falls back to a neutral style line when the plan has none."""
+    prompt = shots[0]["keyframe_prompt"]
+    if not str(plan.get("style") or "").strip():
+        prompt = f"{prompt} {DEFAULT_STYLE}"
+    return prompt
 
 
 def character_sheet_prompt(plan):
@@ -91,21 +120,6 @@ def character_sheet_prompt(plan):
             f'facing camera: {c["character"]}. {c["costume"]}. Neutral pose, plain '
             f'soft grey studio background, even lighting, crisp detail. '
             f'{plan.get("style", "")}.')
-
-
-def k0_prompt(plan, first_action):
-    # Style must be pinned as hard as identity: without it, image-edit re-renders
-    # the world as CGI/cartoon while keeping the character (measured on K0 v1).
-    c = plan["consistency"]
-    return (f'Photorealistic wildlife photography with the EXACT same rendering '
-            f'style, lighting realism and level of detail as the reference image. '
-            f'Place this EXACT character — {c["character"]}, {c["costume"]}, keep '
-            f'every distinguishing feature identical and at natural scale — into '
-            f'this scene: {c["location"]} (natural organic sea ice, irregular '
-            f'edges, NOT a geometric shape). Palette: {c["palette"]}. '
-            f'Composition: {first_action}. Medium-wide framing. Cinematic film '
-            f'still. {plan.get("style", "")}. Strictly NO 3D-render look, no '
-            f'cartoon, no CGI, no toy or miniature look.')
 
 
 def beat_prompt(plan, action):
@@ -122,6 +136,8 @@ def beat_prompt(plan, action):
 def _qa_gate(path, ref, what):
     qa = vision_qa(path, ref, what)
     status = "PASS" if qa["passed"] else "FAIL"
+    if qa.get("status") == "qa_unavailable":
+        status += " (qa_unavailable)"
     print(f"  [QA] {what}: {status} {('- ' + qa['issues']) if qa['issues'] else ''}")
     return qa["passed"]
 
@@ -141,13 +157,9 @@ def make_film_chained(premise: str):
     print("[chain] phase 0: character sheet...")
     char_ref = gen_image(character_sheet_prompt(plan), "ref_character.png")
     print("[chain] phase 0: K0 opening frame (t2i, becomes the anchor)...")
-    k0_path = gen_image(
-        shots[0]["keyframe_prompt"] + " Photorealistic wildlife photography.",
-        "beat_00.png")
+    k0_path = gen_image(k0_prompt(plan, shots), "beat_00.png")
     if not _qa_gate(k0_path, char_ref, "K0 opening frame"):
-        k0_path = gen_image(
-            shots[0]["keyframe_prompt"] + " Photorealistic wildlife photography.",
-            "beat_00.png")
+        k0_path = gen_image(k0_prompt(plan, shots), "beat_00.png")
         if not _qa_gate(k0_path, char_ref, "K0 retry"):
             raise SystemExit("STOP-LOSS: K0 failed QA twice — fix assets before burning segments.")
 
