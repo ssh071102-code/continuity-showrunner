@@ -64,8 +64,9 @@ def vision_qa(candidate_path, ref_path, what: str) -> dict:
     """Compare a frame against the character sheet.
 
     Returns {passed, status, issues}. status is "ok" when the model answered
-    with parseable JSON, "qa_unavailable" when the call failed after retries or
-    the reply could not be parsed. qa_unavailable is fail-closed (passed=False)
+    with parseable JSON in which same_character and artifacts are both JSON
+    booleans, "qa_unavailable" when the call failed after retries or the reply
+    could not be parsed or lacked a boolean verdict field. qa_unavailable is fail-closed (passed=False)
     unless CHAIN_QA_FAIL_OPEN=1.
     """
     from src.media import fresh_local_uri, with_retry
@@ -97,11 +98,14 @@ def vision_qa(candidate_path, ref_path, what: str) -> dict:
                        if isinstance(i, dict))
         start, end = text.find("{"), text.rfind("}")
         j = json.loads(text[start:end + 1])
-        if not isinstance(j, dict) or "same_character" not in j:
-            raise ValueError("missing same_character")
+        # Both verdict fields must be present JSON booleans; "false", 1, null or
+        # a missing field is not a verdict.
+        if not isinstance(j, dict) or not all(
+                isinstance(j.get(k), bool) for k in ("same_character", "artifacts")):
+            raise ValueError("missing or non-boolean verdict field")
     except Exception:  # noqa: BLE001 - malformed reply means "no verdict"
         return _qa_unavailable("unparseable QA reply")
-    return {"passed": bool(j.get("same_character")) and not j.get("artifacts"),
+    return {"passed": j["same_character"] and not j["artifacts"],
             "status": "ok", "issues": j.get("issues", "")}
 
 

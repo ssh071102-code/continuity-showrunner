@@ -62,6 +62,20 @@ def test_unparseable_reply_is_fail_closed(fake_qa, reply):
     assert qa["passed"] is False and qa["status"] == "qa_unavailable"
 
 
+@pytest.mark.parametrize("reply", [
+    '{"same_character": "false", "artifacts": false}',   # string, not a JSON boolean
+    '{"same_character": true}',                          # artifacts missing
+    '{"same_character": true, "artifacts": "false"}',
+    '{"same_character": true, "artifacts": null}',
+    '{"same_character": 1, "artifacts": 0}',
+    '[true, false]',                                     # not a JSON object
+])
+def test_incomplete_or_mistyped_verdict_is_fail_closed(fake_qa, reply):
+    fake_qa(_rsp(reply))
+    qa = chain.vision_qa("cand.png", "ref.png", "tail")
+    assert qa["passed"] is False and qa["status"] == "qa_unavailable"
+
+
 def test_fail_open_opt_in(fake_qa, monkeypatch):
     fake_qa(ConnectionError("reset"))
     monkeypatch.setenv("CHAIN_QA_FAIL_OPEN", "1")

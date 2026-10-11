@@ -19,9 +19,14 @@ No API key is needed for the tests or the CLI help:
 git clone https://github.com/ssh071102-code/continuity-showrunner.git
 cd continuity-showrunner
 pip install -r requirements-dev.txt
+# Linux only: the ffmpeg bundled with imageio-ffmpeg lacks drawtext, which the
+# title/caption test needs. Use the distro ffmpeg instead (CI does the same).
+sudo apt-get update && sudo apt-get install -y ffmpeg && export IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg
 python -m pytest tests          # offline: assembly tests + chain QA tests, no network
 python -m src.run --help        # CLI options for the per-shot runner
 ```
+
+On Windows the bundled ffmpeg already has `drawtext`, so skip the Linux line. macOS is untested; if the title test fails there, point `IMAGEIO_FFMPEG_EXE` at a full ffmpeg (for example `brew install ffmpeg`).
 
 To generate a film you need a Qwen Cloud key (https://home.qwencloud.com/api-keys).
 Copy `secrets/.env.example` to `secrets/.env` and set `DASHSCOPE_API_KEY=sk-...`. Generation calls paid image and video models.
@@ -58,7 +63,7 @@ The v4 film and the gallery grid above came from `src.chain`.
 
 Each K0, beat keyframe and segment tail goes through a vision check. A failed keyframe gets one retry; a second failure, or any failed segment tail, stops the run so no more segments are paid for on a broken chain.
 
-If the QA call cannot return a verdict (network error after retries, non-200 response, or a reply without the expected JSON), the check is logged as `qa_unavailable` and counts as a fail. Set `CHAIN_QA_FAIL_OPEN=1` to let those cases pass instead.
+If the QA call cannot return a verdict (network error after retries, non-200 response, or a reply whose `same_character` and `artifacts` fields are not both JSON booleans), the check is logged as `qa_unavailable` and counts as a fail. Set `CHAIN_QA_FAIL_OPEN=1` to let those cases pass instead.
 
 ## Consistency across versions (judged by eye)
 
