@@ -1,4 +1,4 @@
-"""Segment-chained film director — Laurin's last-frame chaining methodology.
+"""Segment-chained film director: last-frame chaining.
 
 Pipeline (one segment at a time, never batch):
   Phase 0   Pre-production assets: a canonical CHARACTER SHEET, then K0 - the

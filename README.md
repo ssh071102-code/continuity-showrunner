@@ -128,9 +128,6 @@ outputs/            generated frames, clips and films (gitignored)
 
 [script2video](https://github.com/ssh071102-code/script2video) handles the deterministic side of the same problem: it turns a written script into narration with word-timed captions and assembles the video with ffmpeg.
 
-## AI assistance
-This project was built with AI assistance (Claude Code). Commits it co-authored carry a `Co-Authored-By` trailer.
-
 ## License
 
 MIT, see [LICENSE](LICENSE).
